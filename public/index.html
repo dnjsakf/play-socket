@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="/css/common.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <script type="text/javascript" src="/js/SocketManager.js"></script>
+  <script type="text/javascript">
+    function Player(settings){
+      // Player Configurations
+      const config = Object.assign({
+        _id: null,
+        name: "Unknown",
+        health: 100,
+        pos: { x: 0, y: 0, },
+        shape: {
+          type: "rect",
+          color: "#ffffff"
+        },
+        size: {
+          width: 30,
+          height: 30,
+        }
+      }, settings);
+
+      this.getConfig = (k)=>(config[k]);
+      this.setConfig = (k,v)=>(config[k]=v);
+      this.getId = ()=>(config._id);
+
+      this.getPos = ()=>(config.pos);
+      this.setPos = (x,y)=>(config.pos = { x, y });
+      this.getPosX = ()=>(config.pos.x);
+      this.setPosX = (x)=>(config.pos.x = x);
+      this.getPosY = ()=>(config.pos.y);
+      this.setPosY = (y)=>(config.pos.y = y);
+
+      this.getSize = ()=>(config.size);
+      this.setSize = (width,height)=>(config.size = { width, height });
+      this.getWidth = ()=>(config.size.width);
+      this.setWidth = (width)=>(config.size.width = width);
+      this.getHeight = ()=>(config.size.height);
+      this.setHeight = (height)=>(config.size.height = height);
+
+      return this.init();
+    }
+    Player.prototype = (()=>{
+      const _init = (self)=>{
+        /**
+         * 실시간으로 움직이는 정보를 받을 수 있도록 Socket 처리
+         * 1) Socket Connection
+         * 2) Socket Event Emit
+         * 3) Socket Event Receiver
+         */
+      }
+      const _move = (self,x,y)=>{
+        // const moveX = x + (self.getWidth()/2);
+        // const moveY = y + (self.getHeight()/2);
+        const moveX = x;
+        const moveY = y;
+        
+        console.log("move", self.getId(), self.getConfig("name"), moveX, moveY);
+
+        self.setPos(moveX, moveY);
+      }
+      const _fire = (self)=>{
+        console.log("fire");
+      }
+      const _draw = (self,ctx)=>{
+        const path = new Path2D();
+        const x = self.getPosX();
+        const y = self.getPosY();
+        const width = self.getWidth();
+        const height = self.getHeight();
+
+        path.rect(x, y, width, height);
+        
+        ctx.addPath(path);
+      }
+      return {
+        init(){
+          return _init(this);
+        },
+        move(x,y){
+          _move(this,x,y);
+        },
+        fire(){
+          _fire(this);
+        },
+        draw(ctx){
+          _draw(self, ctx);
+        }
+      }
+    })();
+  </script>
+  <script type="text/javascript">
+    function StageManager(settings){
+      const config = Object.assign({
+        rootElement: "body",
+        width: 500,
+        height: 500,
+      }, settings);
+
+      const insts = {
+        canvas: null,
+      }
+      const players = [
+      ];
+
+      this.getConfig = (k)=>(config[k]);
+      this.setConfig = (k,v)=>(config[k]=v);
+      this.getInst = (k)=>(insts[k]);
+      this.setInst = (k,v)=>(insts[k]=v);
+
+      this.getRoot = (k)=>(document.querySelector(config.rootElement)||document.body);
+      this.getCanvas = ()=>(insts.canvas);
+      this.setCanvas = (v)=>(insts.canvas=v);
+      this.getCtx = (v)=>(insts.canvas ? insts.canvas.getContext(v) : null);
+
+      this.addPlayer = (v)=>(players.push(v));
+    }
+    StageManager.prototype = (()=>{
+      const _init = (self, settings) => {
+        /**
+         * 초기화면 설정
+         */
+         renderCanvas(self);
+         renderPlayer(self);
+         makePlayer(self);
+      }
+      
+      const renderCanvas = (self, width, height)=>{
+        const root = self.getRoot();
+        const canvas = root.appendChild(document.createElement("canvas"));
+        const ctx = canvas.getContext("2d")
+
+        canvas.width = self.getConfig("width")||width||(window.screen.width/2);
+        canvas.height = self.getConfig("height")||height||(window.screen.height/2);
+        
+        self.setCanvas(canvas);
+      }
+
+      const renderPlayer = (self) => {
+        // https://taegon.kim/archives/9658/comment-page-2
+        // https://developer.mozilla.org/ko/docs/Web/API/Canvas_API/Tutorial/Drawing_shapes
+        const playerImage = new Image();
+        playerImage.src = "/images/player.png";
+        playerImage.addEventListener("load", (e)=>{
+          const ctx = self.getCtx("2d");
+          ctx.drawImage(playerImage, 0, 0, 25, 25);
+        });
+      }
+      const renderPlayerOthers = (self) => {
+      }
+      
+      return {
+        init(settings){
+          _init(this, settings);
+        }
+      }
+    })();
+
+    stage = new StageManager();
+    stage.init();
+  </script>
+</body>
+</html>

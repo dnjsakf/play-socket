@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+<body>
+  <script type="text/javascript">
+    function Player(canvas, settings){
+      // Player Configurations
+      const config = {
+        _id: null,
+        name: "Unknown",
+        health: 100,
+        pos: { x: 0, y: 0, },
+        size: {
+          width: 30,
+          height: 30,
+        },
+        shape: {
+          type: "rect",
+          color: "#000000"
+        },
+      };
+      if( settings ){
+        Object.keys(settings).forEach((key)=>{
+          const value = settings[key];
+          config[key] = (
+            !(value instanceof Array) && value instanceof Object
+            ? Object.assign(config[key]||{}, value)
+            : settings[key]
+          );
+        });
+      }
+
+      // Player ID
+      this.getId = ()=>(config._id);
+
+      // Configuration
+      this.getConfig = (k)=>(config[k]);
+      this.setConfig = (k,v)=>(config[k]=v);
+
+      // Instance
+      const insts = {
+        root: document.querySelector(config.rootElement)||document.body,
+        canvas: canvas,
+        ctx: (canvas ? canvas.getContext("2d") : null),
+      }
+      this.getInst = (k)=>(insts[k]);
+      this.setInst = (k,v)=>(insts[k]=v);
+      this.getRoot = (k)=>(insts.root);
+
+      // Status
+      const status = {
+        jumpping: false
+      }
+      this.getStatus = (k)=>(status[k]);
+      this.setStatus = (k,v)=>(status[k]=v);
+
+      // Path
+      this.getPos = ()=>(config.pos);
+      this.setPos = (x,y)=>(config.pos={ x, y });
+      this.getPosX = ()=>(config.pos.x);
+      this.setPosX = (x)=>(config.pos.x = x);
+      this.getPosY = ()=>(config.pos.y);
+      this.setPosY = (y)=>(config.pos.y = y);
+
+      // Size
+      this.getSize = ()=>(config.size);
+      this.setSize = (width,height)=>(config.size = { width, height });
+      this.getWidth = ()=>(config.size.width);
+      this.setWidth = (width)=>(config.size.width = width);
+      this.getHeight = ()=>(config.size.height);
+      this.setHeight = (height)=>(config.size.height = height);
+
+      // Shape
+      this.getColor = ()=>(config.shape.color);
+      this.setColor = (v)=>(config.shape.color = v);
+
+      // Canvas
+      this.getCanvas = ()=>(insts.canvas);
+      this.getCtx = ()=>(insts.ctx);
+      this.setCtx = (v)=>(insts.ctx=v);
+
+      // KeyBorad
+      const pressKeys = {};
+      this.KEYCODE_ARROW = {
+        "ARROW_LEFT": 37,
+        "ARROW_UP": 38,
+        "ARROW_RIGHT": 39,
+        "ARROW_DOWN": 40
+      }
+      this.KEYCODE_WASD = {
+        "A": 65,
+        "W": 87,
+        "D": 68,
+        "S": 83
+      }
+      this.getPressKeys = ()=>(pressKeys);
+      this.isKeyPressed = (k)=>(k in pressKeys);
+      this.keyPressDown = (k)=>(pressKeys[k]=true);
+      this.keyPressUp = (k)=>(delete pressKeys[k]);
+      this.getKeyCode = (k)=>( k === "wasd" ? KEYCODE_WASD : KEYCODE_ARROW );
+      
+      // Initialize
+      return this.init();
+    }
+    Player.prototype = (()=>{
+      const _init = (self)=>{
+        /**
+         * 실시간으로 움직이는 정보를 받을 수 있도록 Socket 처리
+         * 1) Socket Connection
+         * 2) Socket Event Emit
+         * 3) Socket Event Receiver
+         */
+
+        bindKeyPressEvent(self);
+        bindAnimate(self);
+
+        self.draw();
+      }
+      
+      const bindKeyPressEvent = (self)=>{
+        const handdleKeyDown = (e)=>{ self.keyPressDown(e.keyCode); console.log(e.keyCode) }
+        const handdleKeyUp = (e)=>{ self.keyPressUp(e.keyCode); }
+        self.getRoot().addEventListener("keydown", handdleKeyDown);
+        self.getRoot().addEventListener("keyup", handdleKeyUp);
+      }
+
+      const bindAnimate = (self)=>{
+        const KEYCODE = self.getKeyCode("wasd");
+        let x = self.getPosX();
+        let y = self.getPosY();
+
+        if( self.isKeyPressed(KEYCODE.ARROW_DOWN) ){ y += 5; }
+        if( self.isKeyPressed(KEYCODE.ARROW_UP) ){ y -= 5; }
+        if( self.isKeyPressed(KEYCODE.ARROW_LEFT) ){ x -= 5; }
+        if( self.isKeyPressed(KEYCODE.ARROW_RIGHT) ){ x += 5; }
+
+        self.move(x, y);
+        requestAnimationFrame(bindAnimate.bind(this, self));
+      }
+
+      /**
+       * Player 그리기
+       */
+      const _draw = (self)=>{
+        const canvas = self.getCanvas();
+        const ctx = self.getCtx();
+        const x = self.getPosX();
+        const y = self.getPosY();
+        const width = self.getWidth();
+        const height = self.getHeight();
+        const shape = self.getConfig("shape");
+
+        ctx.fillStyle = shape.color || "#000000";
+        ctx.beginPath();
+        ctx.moveTo(x,y);
+        ctx.lineTo(x+width,y);
+        ctx.lineTo(x+width,y+height);
+        ctx.lineTo(x,y+height);
+        ctx.fill();
+      }
+
+      /**
+       * 기존 좌표의 Player 지우기
+       */
+      const _clear = (self)=>{
+        self.getCtx().clearRect(
+          self.getPosX(),
+          self.getPosY(),
+          self.getWidth(),
+          self.getHeight()
+        );
+      }
+
+      /**
+       * 새로운 좌표로 Player 이동
+       */
+      const _move = (self,x,y)=>{
+        const ctx = self.getCtx();
+        self.clear();
+        self.setPos(x,y);
+        self.draw();
+      }
+
+      return {
+        init(){
+          _init(this);
+          return this;
+        },
+        move(x,y){
+          _move(this,x,y);
+          return this;
+        },
+        jump(){
+          _jump(this);
+          return this;
+        },
+        draw(){
+          _draw(this);
+          return this;
+        },
+        clear(){
+          _clear(this);
+          return this;
+        }
+      }
+    })();
+  </script>
+  <script type="text/javascript">
+    function StageManager(settings){
+      const config = Object.assign({
+        rootElement: "body",
+        width: 500,
+        height: 500,
+      }, settings);
+      this.getConfig = (k)=>(config[k]);
+      this.setConfig = (k,v)=>(config[k]=v);
+
+      const insts = { canvas: null }
+      this.getInst = (k)=>(insts[k]);
+      this.setInst = (k,v)=>(insts[k]=v);
+      this.getCanvas = ()=>(insts.canvas);
+      this.setCanvas = (v)=>(insts.canvas=v);
+      this.getCtx = (v)=>(insts.canvas ? insts.canvas.getContext(v||"2d") : null);
+      this.getRoot = (k)=>(document.querySelector(config.rootElement)||document.body);
+
+      const players = [];
+      this.addPlayer = (v)=>(players.push(v));
+      this.getPlayers = ()=>(players);
+    }
+    StageManager.prototype = (()=>{
+      const _init = (self, settings) => {
+        /**
+         * 초기화면 설정
+         */
+        renderCanvas(self);
+        const player1 = new Player(self.getCanvas(), {
+          _id: "abcd",
+          name: "HI",
+          shape: {
+            color:  "red"
+          }
+        });
+        self.addPlayer(player1);
+      }
+      
+      const renderCanvas = (self, width, height)=>{
+        const root = self.getRoot();
+        const canvas = root.appendChild(document.createElement("canvas"));
+        const ctx = canvas.getContext("2d")
+
+        canvas.width = self.getConfig("width")||width||(window.screen.width/2);
+        canvas.height = self.getConfig("height")||height||(window.screen.height/2);
+
+        self.setCanvas(canvas);
+      }
+
+      const renderPlayerImage = (self) => {
+        // https://taegon.kim/archives/9658/comment-page-2
+        // https://developer.mozilla.org/ko/docs/Web/API/Canvas_API/Tutorial/Drawing_shapes
+        const playerImage = new Image();
+        playerImage.src = "/images/player.png";
+        playerImage.addEventListener("load", (e)=>{
+          const ctx = self.getCtx("2d");
+          ctx.drawImage(playerImage, 0, 0, 25, 25);
+        });
+      }
+      const renderPlayerOthers = (self) => {
+
+      }
+      
+      return {
+        init(settings){
+          _init(this, settings);
+        }
+      }
+    })();
+
+    stage = new StageManager();
+    stage.init();
+  </script>
+</body>
+</html>
