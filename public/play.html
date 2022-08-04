@@ -23,6 +23,7 @@
           type: "rect",
           color: "#000000"
         },
+        keytype: "wasd"
       };
       if( settings ){
         Object.keys(settings).forEach((key)=>{
@@ -87,23 +88,23 @@
       // KeyBorad
       const pressKeys = {};
       this.KEYCODE_ARROW = {
-        "ARROW_LEFT": 37,
-        "ARROW_UP": 38,
-        "ARROW_RIGHT": 39,
-        "ARROW_DOWN": 40
+        "LEFT": 37,   // ARROW_LEFT
+        "UP": 38,     // ARROW_UP
+        "RIGHT": 39,  // ARROW_RIGHT
+        "DOWN": 40,   // ARROW_DOWN
       }
       this.KEYCODE_WASD = {
-        "A": 65,
-        "W": 87,
-        "D": 68,
-        "S": 83
+        "LEFT": 65,   // A
+        "UP": 87,     // W
+        "RIGHT": 68,  // D
+        "DOWN": 83,   // S
       }
       this.getPressKeys = ()=>(pressKeys);
       this.isKeyPressed = (k)=>(k in pressKeys);
       this.keyPressDown = (k)=>(pressKeys[k]=true);
       this.keyPressUp = (k)=>(delete pressKeys[k]);
-      this.getKeyCode = (k)=>( k === "wasd" ? KEYCODE_WASD : KEYCODE_ARROW );
-      
+      this.getKeyCode = (k)=>( k === "wasd" ? this.KEYCODE_WASD : this.KEYCODE_ARROW );
+
       // Initialize
       return this.init();
     }
@@ -123,21 +124,21 @@
       }
       
       const bindKeyPressEvent = (self)=>{
-        const handdleKeyDown = (e)=>{ self.keyPressDown(e.keyCode); console.log(e.keyCode) }
+        const handdleKeyDown = (e)=>{ self.keyPressDown(e.keyCode); console.log(e.key, e.keyCode, self.KEYCODE_WASD.RIGHT) }
         const handdleKeyUp = (e)=>{ self.keyPressUp(e.keyCode); }
         self.getRoot().addEventListener("keydown", handdleKeyDown);
         self.getRoot().addEventListener("keyup", handdleKeyUp);
       }
 
       const bindAnimate = (self)=>{
-        const KEYCODE = self.getKeyCode("wasd");
+        const KEYCODE = self.getKeyCode(self.getConfig("keytype"));
         let x = self.getPosX();
         let y = self.getPosY();
 
-        if( self.isKeyPressed(KEYCODE.ARROW_DOWN) ){ y += 5; }
-        if( self.isKeyPressed(KEYCODE.ARROW_UP) ){ y -= 5; }
-        if( self.isKeyPressed(KEYCODE.ARROW_LEFT) ){ x -= 5; }
-        if( self.isKeyPressed(KEYCODE.ARROW_RIGHT) ){ x += 5; }
+        if( self.isKeyPressed(KEYCODE.DOWN) ){ y += 5; }
+        if( self.isKeyPressed(KEYCODE.UP) ){ y -= 5; }
+        if( self.isKeyPressed(KEYCODE.RIGHT) ){ x += 5; }
+        if( self.isKeyPressed(KEYCODE.LEFT) ){ x -= 5; }
 
         self.move(x, y);
         requestAnimationFrame(bindAnimate.bind(this, self));
