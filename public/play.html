@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Document</title>
   <style type="text/css">
-    * { user-select: none; touch-action: none; }
+    * { box-sizing: border-box; padding: 0; margin: 0; user-select: none; touch-action: none; }
   </style>
 </head>
 <body>
@@ -33,31 +33,75 @@
     <button id="reset">reset</button>
     <button id="destroy">destroy</button>
   </div>
+  <div>
+    <canvas id="canvas-playground"></canvas>
+  </div>
+  <script type="text/javascript">
+    function StageUtil(){}
+    StageUtil = (()=>{
+      return {
+        // 두 점 사이의 거리
+        getDistance(x1, y1, x2, y2){
+          // 거리의 제곱 = 밑변의 제곱 + 높이의 제곱
+          // 거리 = 루트(밑변의 제곱 + 높이의 제곱)
+          return Math.sqrt(Math.pow((x2 - x1),2)+Math.pow((y2 - y1),2));
+        },
+        // 두 점 사이의 각도
+        getAngle(x1, y1, x2, y2, rotate){
+          return (Math.atan2((y2 - y1), (x2 - x1)) * (180/Math.PI)) + (rotate||0);
+        },
+        // 특정 각도로 특정 길이만큼 이동했을 때 좌표
+        getDistPos(dist, angle, x1, y1){
+          const distX = (dist * Math.cos(angle*(Math.PI/180)));
+          const distY = (dist * Math.sin(angle*(Math.PI/180)));
+          return {
+            x: x1 + distX,
+            y: y1 + distY,
+            distX: distX,
+            distY: distY,
+            left: distX < 0,
+            right: distX > 0,
+            up: distY < 0,
+            down: distY > 0,
+          }
+        },
+        // 회전시키기
+        setRotate(rotate, width, x1, y1, x2, y2){
+          const angle = StageUtil.getAngle(x1, y1, x2, y2, rotate); // 각도
+          const dist = StageUtil.getDistance(x1, y1, x1+(width/2), y1+(width/2)); // 거리
+          return {
+            x: x1 + (dist * Math.cos((angle * Math.PI/180))),
+            y: y1 + (dist * Math.sin((angle * Math.PI/180))),
+          }
+        }
+      }
+    })();
+  </script>
   <script type="text/javascript">
     function Player(canvas, settings){
       // Player Configurations
       const config = {
         _id: null,
         name: "Unknown",
-        health: 100,
-        pos: {
-          x: 0, y: 0
-        },
+        size: "middle", // [small, middle, large]
+        inputType: "wasd", // wasd: Default, arrow
         shape: {
           type: "circle",
-          color: "#000000",
-          size: {
-            width: 30,
-            height: 30,
-          }
+          color: "#000000"
         },
-        inputType: "wasd" // wasd: Default, arrow
+        pos: {
+          x: 30,
+          y: 30
+        },
+        status: {
+          health: 100,
+        }
       };
       if( settings ){
         Object.keys(settings).forEach((key)=>{
           const value = settings[key];
           config[key] = (
-            !(value instanceof Array) && value instanceof Object
+            !(value instanceof Array || value instanceof Player) && value instanceof Object
             ? Object.assign(config[key]||{}, value)
             : settings[key]
           );
@@ -68,6 +112,7 @@
       this.getConfig = (k)=>(config[k]);
       this.setConfig = (k,v)=>(config[k]=v);
       this.getId = ()=>(config._id);
+      this.getName = ()=>(config.name);
 
       // Instance
       const insts = {
@@ -84,10 +129,61 @@
 
       // Status
       const status = {
+        health: 100,
         jumpping: false
       }
+      Object.assign(status, config.status);
       this.getStatus = (k)=>(status[k]);
       this.setStatus = (k,v)=>(status[k]=v);
+      this.getHealth = ()=>(status.health);
+      this.setHealth = (v)=>(status.health=v);
+
+      // Shape
+      const shape = {
+        type: "circle", // rect, circle, triangle
+        color: "#ffffff" , // black
+        size: {
+          width: 30,
+          height: 30,
+          radius: 15,
+        }
+      }
+      Object.assign(shape, config.shape);
+      if( !config.size || config.size === "large" ){
+        shape.size = {
+          width: 30,
+          height: 30,
+          radius: 15,
+        }
+      } else if ( config.size === "middle" ){
+        shape.size = {
+          width: 20,
+          height: 20,
+          radius: 10
+        }
+      } else if ( config.size === "small" ){
+        shape.size = {
+          width: 15,
+          height: 15,
+          radius: 7.5
+        }
+      }
+
+      this.getShape = ()=>(shape.type);
+      this.setShape = (v)=>(shape.type=v);
+      this.getSize = ()=>(shape.size);
+      this.setSize = (width,height)=>(shape.size = { width, height });
+      this.getWidth = ()=>(shape.size.width);
+      this.setWidth = (width)=>{
+        shape.size.width = width;
+        shape.size.radius = (width/2);
+      };
+      this.getHeight = ()=>(shape.size.height);
+      this.setHeight = (height)=>(shape.size.height = height);
+      this.getRadius = ()=>(shape.size.radius);
+      this.setRadius = (v)=>(shape.size.radius=v);
+      this.getColor = ()=>(shape.color);
+      this.setColor = (v)=>(shape.color = v);
 
       // Position: Player
       const move = {
@@ -98,41 +194,25 @@
       }
       Object.assign(move.pos, config.pos);
 
-      this.getMovePos = ()=>(move.pos);
-      this.setMovePos = (x,y)=>(Object.assign(move.pos,{x,y}));
-      this.getMovePosX = ()=>(move.pos.x);
-      this.setMovePosX = (x)=>(move.pos.x = x);
-      this.getMovePosY = ()=>(move.pos.y);
-      this.setMovePosY = (y)=>(move.pos.y = y);
+      this.getPos = ()=>(move.pos);
+      this.setPos = (x,y)=>(Object.assign(move.pos,{x,y}));
+      this.getPosX = ()=>(move.pos.x);
+      this.setposX = (x)=>(move.pos.x = x);
+      this.getPosY = ()=>(move.pos.y);
+      this.setposY = (y)=>(move.pos.y = y);
       this.getMoveSpeed = ()=>(move.speed);
       this.setMoveSpeed = (v)=>(move.speed=v);
 
-      // Positions: pointer
-      const pointer = {
-        pressed: false,
-        pos: {
-          x: 0, y: 0
-        }
-      }
-      this.getPointerPos = ()=>(pointer.pos);
-      this.setPointerPos = (x,y)=>(Object.assign(pointer.pos,{x,y}));
-      this.getPointerX = ()=>(pointer.pos.x);
-      this.setPointerX = (x)=>(pointer.pos.x=x);
-      this.getPointerY = ()=>(pointer.pos.y);
-      this.setPointerY = (y)=>(pointer.pos.y=y);
-      this.pointerDown = ()=>(pointer.pressed=true);
-      this.pointerUp = ()=>(pointer.pressed=false);
-      this.pointerPressed = ()=>(pointer.pressed);
-
       // Positions: Aim
       const aim = {
+        size: 3,
         dist: {
-          now: 50,
-          min: 50,
-          max: 100
+          now: shape.size.width*2,
+          min: 10,
+          max: 200
         },
         pos: {
-          x: 0, y: 0,
+          x: 100, y: 100,
         }
       }
       this.getAimPos = ()=>(aim.pos);
@@ -143,38 +223,370 @@
       this.setAimPosY = (y)=>(aim.pos.y=y);
       this.getAimDist = ()=>(aim.dist.now);
       this.setAimDist = (v)=>(aim.dist.now=v);
+      this.getAimSize = ()=>(aim.size);
+      this.setAimSize = (v)=>(aim.size=v);
       this.getAimDistMin = ()=>(aim.dist.min);
       this.getAimDistMax = ()=>(aim.dist.max);
 
-      // Shape
-      const sahpe = {
-        type: "circle", // rect, circle, triangle
-        color: "#ffffff" , // black
+      // Initialize
+      return this.init();
+    }
+    Player.prototype = (()=>{
+      const _init = (self)=>{
+        /**
+         * 실시간으로 움직이는 정보를 받을 수 있도록 Socket 처리
+         * 1) Socket Connection
+         * 2) Socket Event Emit
+         * 3) Socket Event Receiver
+         */
+
+        // Player 그리기
+        _draw(self);
+      }
+      
+      // 원형 그리기
+      const _drawCircle = (self, x, y, radius)=>{
+        const ctx = self.getCtx();
+        const color = self.getColor();
+        const aimX = self.getAimPosX();
+        const aimY = self.getAimPosY();
+        const zeroX = x + radius;
+        const zeroY = y + radius;
+
+        const angle = StageUtil.getAngle(zeroX, zeroY, aimX, aimY);
+
+        // 원형
+        ctx.beginPath();
+        ctx.arc(x + radius, y + radius, radius, angle, 360, 0);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+      }
+      // 사각형 그리기
+      const _drawRectangle = (self, x, y, width, height)=>{
+        const ctx = self.getCtx();
+        const color = self.getColor();
+        const aimX = self.getAimPosX();
+        const aimY = self.getAimPosY();
+        const zeroX = x + (width / 2);
+        const zeroY = y + (width / 2);
+
+        const p1 = StageUtil.setRotate(0, width, zeroX, zeroY, aimX, aimY);
+        const p2 = StageUtil.setRotate(90, width, zeroX, zeroY, aimX, aimY);
+        const p3 = StageUtil.setRotate(180, width, zeroX, zeroY, aimX, aimY);
+        const p4 = StageUtil.setRotate(270, width, zeroX, zeroY, aimX, aimY);
+
+        // 사각형
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+
+        // 전면 포인트
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.arc(p1.x, p1.y, 2, 0, Math.PI*2, 0);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+        ctx.closePath();
+      }
+      // 삼각형 그리기
+      const _drawTriangle = (self, x, y, width, height)=>{
+        const ctx = self.getCtx();
+        const color = self.getColor();
+        const aimX = self.getAimPosX();
+        const aimY = self.getAimPosY();
+        const zeroX = x + (width / 2);
+        const zeroY = y + (width / 2);
+
+        const p1 = StageUtil.setRotate(0, width, zeroX, zeroY, aimX, aimY);
+        const p2 = StageUtil.setRotate(140, width, zeroX, zeroY, aimX, aimY);
+        const p3 = StageUtil.setRotate(-140, width, zeroX, zeroY, aimX, aimY);
+
+        // 삼각형
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+
+        // 전면 포인트
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.arc(p1.x, p1.y, 2, 0, Math.PI*2, 0);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+        ctx.closePath();
+      }
+      // 텍스트 그리기
+      const _drawText = (self, text, x, y)=>{
+        const ctx = self.getCtx();
+        const color = self.getColor();
+
+        ctx.beginPath();
+        ctx.font = "13px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "inherit";
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+        ctx.closePath();
+      }
+
+      // 체력바 그리기
+      const _drawHealthBar = (self, x, y, width, height)=>{
+        const ctx = self.getCtx();
+        const maxHealth = width+20;
+
+        let color = "green";
+        let health = maxHealth-((maxHealth/100)*(100-self.getHealth()));
+        if( health <= 0 ){
+          health = 0;
+        }
+        let healthGauge = (health/maxHealth)*100;
+        if( healthGauge < 25 ){
+          color = "red";
+        } else if( healthGauge < 50 ){
+          color = "yellow"
+        }
+
+        ctx.beginPath();
+        ctx.rect(x-10, y-10, health < 0 ? 0 : health, 5);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.rect(x-10, y-10, width+20, 5);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+        ctx.closePath();
+      }
+      
+      // 조준점 그리기
+      const _drawAiming = (self)=>{
+        const ctx = self.getCtx();
+
+        const width = self.getWidth();
+        const height = self.getHeight();
+        const radius = self.getRadius();
+        const posX = self.getPosX() + radius;
+        const posY = self.getPosY() + radius;
+
+        const aimSize = self.getAimSize();
+        const aimPosX = self.getAimPosX();
+        const aimPosY = self.getAimPosY();
+        const aimDist = self.getAimDist();
+        const aimAngle = StageUtil.getAngle(posX, posY, aimPosX, aimPosY);
+
+        const crntAimPos = StageUtil.getDistPos(aimDist, aimAngle, posX, posY);
+        const crntAimPosX = crntAimPos.x;
+        const crntAimPosY = crntAimPos.y;
+
+        // Aiming 표시
+        ctx.beginPath();
+        ctx.setLineDash([]);
+        ctx.moveTo(crntAimPosX, crntAimPosY);
+        ctx.arc(crntAimPosX, crntAimPosY, aimSize, 0, Math.PI*2, 0);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+        ctx.closePath();
+
+        // Aiming 범위 표시
+        ctx.beginPath();
+        ctx.setLineDash([width/3,width]);
+        ctx.arc(posX, posY, aimDist, 0, Math.PI*2, 0);
+        ctx.strokeStyle = "red";
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.closePath();
+
+        // Aiming Line 표시
+        ctx.beginPath();
+        ctx.setLineDash([5,5]);
+        ctx.moveTo(posX, posY);
+        ctx.arc(posX, posY, 1, 0, Math.PI*2, 0);
+        ctx.lineTo(crntAimPosX, crntAimPosY);
+        ctx.strokeStyle = "lightgrey";
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.closePath();
+      }
+
+      // 가이드라인 출력
+      const _drawGuideLine = (self)=>{
+        const ctx = self.getCtx();
+        const color = "red";
+        
+        const width = self.getWidth();
+        const height = self.getHeight();
+        const radius = self.getRadius();
+
+        const posX = self.getPosX();
+        const posY = self.getPosY();
+        const aimX = self.getAimPosX();
+        const aimY = self.getAimPosY();
+
+        // 십자모양 출력
+        ctx.beginPath();
+        ctx.moveTo(posX, posY + radius);
+        ctx.lineTo(posX + width, posY + radius);  // 가로선
+        ctx.moveTo(posX + radius, posY);
+        ctx.lineTo(posX + radius, posY + height); // 세로선
+        ctx.moveTo(posX + radius, posY + radius);
+        ctx.arc(posX + radius, posY + radius, radius, 0, Math.PI * 2, 0);
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        ctx.closePath();
+      }
+      
+      // Player 그리기
+      const _drawPlayer = (self)=>{
+        const shape = self.getShape();
+        const name = self.getName()||"Unknown";
+
+        const width = self.getWidth();
+        const height = self.getHeight();
+        const radius = self.getRadius();
+        const posX = self.getPosX();
+        const posY = self.getPosY();
+
+        switch( shape ){
+          case "circle": // 원형
+            _drawCircle(self, posX, posY, radius);
+            break;
+
+          case "triangle": // 삼각형
+            _drawTriangle(self, posX, posY, width, height);
+            break;
+
+          case "rect": // 사각형: Default
+          default:
+            _drawRectangle(self, posX, posY, width, height);
+        }
+
+        // 이름 표시
+        _drawText(self, name, posX + radius, posY - 20);
+
+        // 체력 게이지 표시
+        _drawHealthBar(self, posX, posY, width, height);
+      }
+
+      const _draw = (self)=>{
+        _drawPlayer(self); // Player 그리기
+        _drawAiming(self); // Aiming 그리기
+        _drawGuideLine(self); // Guide 그리기
+      }
+
+      return {
+        init(){
+          _init(this);
+          return this;
+        },
+        draw(){
+          _draw(this);
+          return this;
+        },
+      }
+    })();
+  </script>
+  <script type="text/javascript">
+    function StageManager(canvas, settings){
+      const config = {
         size: {
-          width: 30,
-          height: 30,
-          radius: 15,
+          width: 500,
+          height: 500,
         }
       }
-      Object.assign(sahpe, config.shape);
-      this.getShape = (k)=>(sahpe[k]);
-      this.setShape = (k,v)=>(sahpe[k]=v);
-      this.getSize = ()=>(sahpe.size);
-      this.setSize = (width,height)=>(sahpe.size = { width, height });
-      this.getWidth = ()=>(sahpe.size.width);
-      this.setWidth = (width)=>(sahpe.size.width = width);
-      this.getHeight = ()=>(sahpe.size.height);
-      this.setHeight = (height)=>(sahpe.size.height = height);
-      this.getRadius = ()=>(sahpe.size.radius);
-      this.setRadius = (v)=>(sahpe.size.radius=v);
-      this.getColor = ()=>(sahpe.color);
-      this.setColor = (v)=>(sahpe.color = v);
+      if( settings ){
+        Object.keys(settings).forEach((key)=>{
+          const value = settings[key];
+          config[key] = (
+            !(value instanceof Array) && value instanceof Object
+            ? Object.assign(config[key]||{}, value)
+            : settings[key]
+          );
+        });
+      }
+
+      // Configurations
+      this.getConfig = (k)=>(config[k]);
+      this.setConfig = (k,v)=>(config[k]=v);
+
+      // Instance
+      const insts = {
+        root: document.body,
+        canvas: canvas
+      }
+      this.getInst = (k)=>(insts[k]);
+      this.setInst = (k,v)=>(insts[k]=v);
+      this.getRoot = ()=>(insts.root);
+      this.getCanvas = ()=>(insts.canvas);
+      this.setCanvas = (v)=>(insts.canvas=v);
+      this.getCtx = ()=>(insts.ctx);
+      this.setCtx = (v)=>(insts.ctx=v);
+
+      // State
+      const state = {
+        players: 0,
+        drawing: false,
+      }
+      this.getState = (k)=>(state[k]);
+      this.setState = (k,v)=>(state[k] = v);
+
+      // Players
+      const player = {
+        me: null,
+        others: [],
+      }
+      this.getPlayer = ()=>(player.me);
+      this.setPlayer = (v)=>(player.me=v);
+      this.getPlayers = ()=>(player.others);
+      this.setPlayers = (v)=>(player.others=v);
+      this.addPlayer = (v)=>{
+        player.others.push(v);
+        state.players = player.others.length;
+      };
+
+      // Shape
+      const shape = {
+        size: {
+          width: 500,
+          height: 500,
+        }
+      }
+      Object.assign(shape.size, config.size);
+      this.getSize = ()=>(shape.size);
+      this.setSize = (v)=>(Object.assign(shape.size, v));
+      this.getWidth = ()=>(shape.size.width);
+      this.getHeight = ()=>(shape.size.height);
+
+      // Positions: pointer
+      const pointer = {
+        pressed: false,
+        pos: {
+          x: 0,
+          y: 0
+        }
+      }
+      this.getPointerPos = ()=>(pointer.pos);
+      this.setPointerPos = (x,y)=>(Object.assign(pointer.pos,{x,y}));
+      this.getPointerPosX = ()=>(pointer.pos.x);
+      this.setPointerX = (x)=>(pointer.pos.x=x);
+      this.getPointerPosY = ()=>(pointer.pos.y);
+      this.setPointerY = (y)=>(pointer.pos.y=y);
+      this.pointerDown = ()=>(pointer.pressed=true);
+      this.pointerUp = ()=>(pointer.pressed=false);
+      this.pointerPressed = ()=>(pointer.pressed);
 
       // Keyboard Pressed
       const pressKeys = {};
-      this.keyPressed = (k)=>(k in pressKeys);
-      this.keyDown = (k)=>(pressKeys[k]=true);
-      this.keyUp = (k)=>(delete pressKeys[k]);
+      this.keyboardPressed = (k)=>( k ? k in pressKeys : Object.keys(pressKeys).length > 0 );
+      this.keyboardDown = (k)=>(pressKeys[k]=true);
+      this.keyboardUp = (k)=>(delete pressKeys[k]);
       
       // Keyboard Codes
       this.KEYCODE = {
@@ -200,30 +612,22 @@
         "DOWN": this.KEYCODE.S,
       }
       this.getKeyCode = (k)=>(
-        (config.inputType||"wasd").toLowerCase() === "wasd"
+        (k||"wasd").toLowerCase() === "wasd"
         ? this.KEYCODE_WASD
         : this.KEYCODE_ARROW 
       );
 
-      // Initialize
       return this.init();
     }
-    Player.prototype = (()=>{
-      const _init = (self)=>{
-        /**
-         * 실시간으로 움직이는 정보를 받을 수 있도록 Socket 처리
-         * 1) Socket Connection
-         * 2) Socket Event Emit
-         * 3) Socket Event Receiver
-         */
-
-        // 현재 사용자만 적용
-        bindKeyPressEvent(self);
-
-        // Player 그리기
-        _draw(self);
+    StageManager.prototype = (()=>{
+      const _init = (self, settings) => {
+        // Canvas 초기 설정
+        _initCanavs(self);
+        
+        // Event 바인딩
+        _bindEvent(self);
       }
-      
+
       /**
        * 이벤트 바인딩
        * - keyDown: 키 입력 중
@@ -232,9 +636,9 @@
        * - mouseup, touchend: 포인터 입력 완료
        * - mousemove, touchemove: 포인터 이동
        */
-      const bindKeyPressEvent = (self)=>{
-        self.getRoot().addEventListener("keydown", (e)=>{ self.keyDown(e.keyCode); });
-        self.getRoot().addEventListener("keyup", (e)=>{ self.keyUp(e.keyCode); });
+      const _bindEvent = (self)=>{
+        self.getRoot().addEventListener("keydown", (e)=>{ self.keyboardDown(e.keyCode); });
+        self.getRoot().addEventListener("keyup", (e)=>{ self.keyboardUp(e.keyCode); });
         
         self.getRoot().addEventListener("mousedown", (e)=>{
           self.setPointerPos(e.offsetX, e.offsetY);
@@ -258,364 +662,225 @@
           );
         });
       }
+      
+      // Canvas 설정
+      const _initCanavs = (self)=>{
+        const canvas = self.getCanvas();
 
-      /**
-       * 반복 실행 이벤트
-       * - 입력중인 키 정보를 바탕으로 좌표를 이동
-       */
-      const _updatePos = (self)=>{
+        canvas.width = self.getWidth();
+        canvas.height = self.getHeight();
 
-        // 입력 방식에 따른 키 정보 조회
-        const KEYCODE = self.getKeyCode();
-        const SPEED = self.getMoveSpeed();
+        self.setCtx(canvas.getContext("2d"));
+      }
 
-        // 좌표값
-        const minX = 0;
-        const minY = 0;
-        const maxX = self.getCanvas().width - self.getWidth();
-        const maxY = self.getCanvas().height - self.getHeight();
-        let x = self.getMovePosX();
-        let y = self.getMovePosY();
+      // Main Player 생성
+      const _initPlayer = (self)=>{
+      }
+      
+      // Player 위치 갱신
+      const _updatePos = (self, player)=>{
+        // Player 정보
+        const moveInput = player.getConfig("inputType");
+        const moveDist = player.getMoveSpeed();
+
+        // 좌표
+        let posX = player.getPosX();
+        let posY = player.getPosY();
+
+        // 좌표 최소/최대
+        const limitPosX = [0, self.getWidth() - player.getWidth()];
+        const limitPosY = [0, self.getHeight() - player.getHeight()];
         
         // 입력 키에 따른 좌표값 설정
-        if( self.keyPressed(KEYCODE.DOWN) ){ y += SPEED; }
-        if( self.keyPressed(KEYCODE.UP) ){ y -= SPEED; }
-        if( self.keyPressed(KEYCODE.RIGHT) ){ x += SPEED; }
-        if( self.keyPressed(KEYCODE.LEFT) ){ x -= SPEED; }
+        const KEYCODE = self.getKeyCode(moveInput);
+        
+        if( self.keyboardPressed(KEYCODE.RIGHT) ){ posX += moveDist; }
+        if( self.keyboardPressed(KEYCODE.LEFT) ){ posX -= moveDist; }
+        if( self.keyboardPressed(KEYCODE.DOWN) ){ posY += moveDist; }
+        if( self.keyboardPressed(KEYCODE.UP) ){ posY -= moveDist; }
+
+        // 좌표 최소/최대 설정
+        if( posX < limitPosX[0] ){ posX = limitPosX[0]; }
+        if( posY < limitPosY[0] ){ posY = limitPosY[0]; }
+        if( posX > limitPosX[1] ){ posX = limitPosX[1]; }
+        if( posY > limitPosY[1] ){ posY = limitPosY[1]; }
+
+        // 좌표로 설정
+        player.setPos(posX, posY);
+      }
+
+      // Player Pointer Pos
+      const _updatePointer = (self, player)=>{
+        // 이동거리
+        const moveDist = player.getMoveSpeed();
+
+        // 좌표값
+        const pointerPosX = self.getPointerPosX();
+        const pointerPosY = self.getPointerPosY();
+        let posX = player.getPosX();
+        let posY = player.getPosY();
+
+        // 조준점 좌표
+        const aimPosX = player.getAimPosX();
+        const aimPosY = player.getAimPosY();
+        const aimAngle = StageUtil.getAngle(posX, posY, aimPosX, aimPosY);
+        const aimDistPos = StageUtil.getDistPos(moveDist, aimAngle, posX, posY);
+
+        // 좌표 최소/최대
+        const limitPosX = [0, self.getWidth() - player.getWidth()];
+        const limitPosY = [0, self.getHeight() - player.getHeight()];
 
         // 마우스,터치 입력 상태에 따른 좌표값 설정
-        if( self.pointerPressed() ){
-          const pointerPos = self.getPointerPos();
-          const aimPos = self.getAimPos();
-          const distPos = _getDistPos(SPEED, x, y, aimPos.x, aimPos.y);
-          
-          if(( distPos.x < 0 && aimPos.x - SPEED > pointerPos.x )|| // 왼쪽
-             ( distPos.x > 0 && aimPos.x + SPEED < pointerPos.x )){ // 오른쪽
-            x += distPos.x;
+        if( self.pointerPressed() && !self.keyboardPressed() ){
+          // 조준 범위 바깥에만 클릭 가능(왼쪽, 오른쪽)
+          if(( aimDistPos.left && aimPosX - moveDist > pointerPosX )|| // aim > pointer
+             ( aimDistPos.right && aimPosX + moveDist < pointerPosX ))  // aim < pointer
+            {
+            posX += aimDistPos.distX;
           }
-          if(( distPos.y < 0 && aimPos.y - SPEED > pointerPos.y )|| // 상단
-             ( distPos.y > 0 && aimPos.y + SPEED < pointerPos.y )){ // 하단
-            y += distPos.y;
+          // 조준 범위 바깥에만 클릭 가능(위쪽, 아래쪽)
+          if(( aimDistPos.up && aimPosY - moveDist > pointerPosY )|| // aim < pointer
+             ( aimDistPos.down && aimPosY + moveDist < pointerPosY ))  // aim > pointer
+            {
+            posY += aimDistPos.distY;
           }
         }
 
         // 좌표 최소/최대 설정
-        if( x < minX ){ x = minX; }
-        if( y < minY ){ y = minY; }
-        if( x > maxX ){ x = maxX; }
-        if( y > maxY ){ y = maxY; }
+        if( posX < limitPosX[0] ){ posX = limitPosX[0]; }
+        if( posY < limitPosY[0] ){ posY = limitPosY[0]; }
+        if( posX > limitPosX[1] ){ posX = limitPosX[1]; }
+        if( posY > limitPosY[1] ){ posY = limitPosY[1]; }
 
-        // 새로운 좌표로 설정
-        self.setMovePos(x,y);
+        // 좌표로 설정
+        player.setPos(posX, posY);
       }
 
-      /**
-       * 반복 실행 이벤트
-       * - 마우스 방향으로 조준점 좌표 계산
-       */
-      const _updateAim = (self)=>{
-        const radius = ( self.getWidth() / 2 );
-        const pPos = self.getPointerPos();
-        const mPos = self.getMovePos();
-
-        const zeroX = mPos.x + radius;
-        const zeroY = mPos.y + radius;
-
-        const angle = _getAngle(zeroX, zeroY, pPos.x, pPos.y);
-        const dist = _getDistance(zeroX, zeroY, pPos.x, pPos.y);
-
-        const D = self.getAimDist();
-        const aimX = zeroX + (D * Math.cos(angle*(Math.PI/180)));
-        const aimY = zeroY + (D * Math.sin(angle*(Math.PI/180)));
+      // Player Pointer Pos
+      const _followTarget = (self, player, target)=>{
+        // 이동거리
+        const moveDist = player.getMoveSpeed();
         
-        self.setAimPos(aimX, aimY);
+        // 좌표
+        const posX = player.getPosX();
+        const posY = player.getPosY();
+
+        // Target 정보
+        let targetPosX = self.getPointerPosX();
+        let targetPosY = self.getPointerPosY();
+        if( target instanceof Player ){
+          targetPosX = target.getPosX();
+          targetPosY = target.getPosY();
+        }
+        
+        const targetAngle = StageUtil.getAngle(posX, posY, targetPosX, targetPosY);
+        const targetDistPos = StageUtil.getDistPos(moveDist, targetAngle, posX, posY);
+
+        // 좌표 설정
+        player.setPos(targetDistPos.x, targetDistPos.y);
+        player.setAimPos(targetPosX, targetPosY);
       }
 
-      // 두 점 사이의 거리
-      const _getDistance = (x1,y1,x2,y2)=>{
-        const x = (x2 - x1); // 밑변
-        const y = (y2 - y1); // 높이
-        const d = Math.sqrt((x*x)+(y*y)); // 거리의 제곱 = 밑변의 제곱 + 높이의 제곱  === 거리 = 루트(밑변의 제곱 + 높이의 제곱)
-        return d;
+      // 조준점 좌표 갱신
+      const _updateAim = (self, player)=>{
+        // 좌표
+        const pointerPosX = self.getPointerPosX();
+        const pointerPosY = self.getPointerPosY();
+        const posX = player.getPosX() + player.getRadius();
+        const posY = player.getPosY() + player.getRadius();
+
+        // 조준점 좌표
+        const aimDist = player.getAimDist();
+        const aimAngle = StageUtil.getAngle(posX, posY, pointerPosX, pointerPosY);
+        const aimX = posX + (aimDist * Math.cos(aimAngle*(Math.PI/180)));
+        const aimY = posY + (aimDist * Math.sin(aimAngle*(Math.PI/180)));
+        
+        // 조준점 좌표 설정
+        player.setAimPos(aimX, aimY);
       }
 
-      // 두 점 사이의 각도
-      const _getAngle = (x1,y1,x2,y2)=>{
-        const x = (x2 - x1);
-        const y = (y2 - y1);
-        const angle = Math.atan2(y, x) * (180/Math.PI); // 0도, x>0 , y<0 
-        return angle;
-      }
-
-      // 시작점에서 길이 만큼 이동했을 때 좌표
-      const _getDistPos = (D,x1,y1,x2,y2)=>{
-        const angle = _getAngle(x1, y1, x2, y2);
-        const dist = _getDistance(x1, y1, x2, y2);
-        const x = (D * Math.cos(angle*(Math.PI/180)));
-        const y = (D * Math.sin(angle*(Math.PI/180)));
-        return { x, y }
-      }
-
-      /**
-       * Player 그리기
-       */
-      const _draw = (self)=>{
-
-        // 조준점 Position Update
-        _updateAim(self);
-
-        // Player Position Update
-        _updatePos(self);
-
+      // Stage 그리기
+      const _drawStage = (self)=>{
         const ctx = self.getCtx();
-        const name = self.getConfig("name");
-        const shape = self.getConfig("shape");
-        const style = shape.color || "#000000"; // black
-
         const width = self.getWidth();
         const height = self.getHeight();
-        const radius = ( width / 2 );
-        const aimX = self.getAimPosX();
-        const aimY = self.getAimPosY();
-        let x = self.getMovePosX();
-        let y = self.getMovePosY();
-        
-        // Player 표시
-        ctx.fillStyle = style;
-        
-        switch(shape.type){
-          // 원형
-          case "circle":
-            ctx.beginPath();
-            ctx.arc(x + radius, y + radius, radius, 0,  Math.PI*2, 0);
-            ctx.fill();
-            ctx.closePath();
-            break;
+        const pointerPosX = self.getPointerPosX();
+        const pointerPosY = self.getPointerPosY();
 
-          // 삼각형
-          case "triangle":
-            ctx.beginPath();
-            ctx.moveTo(x + ( width / 2 ), y);
-            ctx.lineTo(x, y + height);
-            ctx.lineTo(x + width, y + height);
-            ctx.fill();
-            ctx.closePath();
-            break;
-
-          // 이미지
-          case "image": 
-            const playerImage = new Image();
-            playerImage.src = context+"/images/player.png";
-            playerImage.addEventListener("load", (e)=>{
-              ctx.drawImage(playerImage, x, y, width, height);
-            });
-            break;
-
-          // 사각형(rectangle)
-          case "rect":
-          default:
-            // ctx.save(); // 현재 상태를 스택에 저장
-            ctx.beginPath();
-            ctx.rect(x, y, width, height);      // 사각형
-            ctx.fill();
-            //ctx.restore(); // 스택의 마지막 정보로 되돌리기
-            ctx.closePath();
-            break;
-        }
-        
-        // 플레이어 이름 표시
-        ctx.fillStyle = "blue";
-        ctx.font = "13px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.direction = "inherit";
-        ctx.fillText(name, x+(width/2), y-10);
-
-        // Aim 범위 표시
-        ctx.strokeStyle = "red";
+        // Background 그리기
         ctx.beginPath();
-        ctx.setLineDash([10,30]);
-        ctx.arc(x+(width/2), y+(height/2), self.getAimDist(), 0, Math.PI*2, 0);
+        ctx.strokeStyle = "#000000";
+        ctx.rect(0, 0, width, height);
         ctx.stroke();
         ctx.closePath();
         
-        // Aim Line 표시
-        ctx.strokeStyle = "red";
+        // Pointer 그리기
         ctx.beginPath();
+        ctx.fillStyle = "red";
         ctx.setLineDash([]);
-        ctx.moveTo(x+(width/2), y+(height/2));
-        ctx.arc(x+(width/2), y+(height/2), 1, 0, Math.PI*2, 0);
-        ctx.lineTo(aimX, aimY);
-        ctx.stroke();
-        ctx.closePath();
-
-        // 십자모양 출력
-        ctx.strokeStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.moveTo(x+(width/2), y+(height/2));        // 중앙
-        ctx.lineTo(x+(width/2)-radius, y+(height/2)); // 왼쪽
-        ctx.lineTo(x+(width/2)+radius, y+(height/2)); // 오른쪽
-        ctx.moveTo(x+(width/2), y+(height/2));        // 중앙
-        ctx.lineTo(x+(width/2), y+(height/2)+radius); // 아래
-        ctx.lineTo(x+(width/2), y+(height/2)-radius); // 위
-        ctx.lineTo(x+(width/2), y+(height/2));        // 중앙
-        ctx.stroke();
+        ctx.moveTo(pointerPosX, pointerPosY);
+        ctx.arc(pointerPosX, pointerPosY, 5, 0, Math.PI*2, 0);
+        ctx.fill();
         ctx.closePath();
       }
 
-      return {
-        init(){
-          _init(this);
-          return this;
-        },
-        draw(){
-          _draw(this);
-          return this;
-        },
-      }
-    })();
-  </script>
-  <script type="text/javascript">
-    function StageManager(root, settings){
-      const config = {
-        root: (root||document.body),
-        size: {
-          width: 500,
-          height: 500,
-        }
-      }
-      if( settings ){
-        Object.keys(settings).forEach((key)=>{
-          const value = settings[key];
-          config[key] = (
-            !(value instanceof Array) && value instanceof Object
-            ? Object.assign(config[key]||{}, value)
-            : settings[key]
-          );
-        });
-      }
+      // Player 그리기
+      const _drawPlayers = (self)=>{
+        const player = self.getPlayer();
+        _updatePos(self, player); // 위치 갱신
+        _updateAim(self, player); // 조준점 갱신
+        _updatePointer(self, player); // 포인터 갱신
+        player.draw();
 
-      // Configurations
-      this.getConfig = (k)=>(config[k]);
-      this.setConfig = (k,v)=>(config[k]=v);
+        const objs = self.getPlayers();
+        for(let idx=0; idx<objs.length; idx++){
+          const obj = objs[idx];
 
-      // Instance
-      const insts = {
-        root: config.root,
-        canvas: null
-      }
-      this.getInst = (k)=>(insts[k]);
-      this.setInst = (k,v)=>(insts[k]=v);
-      this.getRoot = ()=>(insts.root);
-
-      // State
-      const state = {
-        players: 0,
-        drawing: false,
-      }
-      this.getState = (k)=>(state[k]);
-      this.setState = (k,v)=>(state[k] = v);
-
-      // Size
-      // canvas -> config -> window
-      this.getWidth = ()=>( insts.canvas ? insts.canvas.width : (config.size.width||window.screen.width));
-      this.getHeight = ()=>( insts.canvas ? insts.canvas.height : (config.size.height||window.screen.height));
-
-      // Canvas
-      this.getCanvas = ()=>(insts.canvas);
-      this.setCanvas = (v)=>(insts.canvas=v);
-      this.getCtx = ()=>(insts.ctx);
-      this.setCtx = (v)=>(insts.ctx=v);
-
-      // Players
-      const player = {
-        me: null,
-        others: [],
-      }
-      this.getPlayer = ()=>(player.me);
-      this.setPlayer = (v)=>(player.me=v);
-      this.getPlayers = ()=>(player.me ? [player.me].concat(player.others) : player.others);
-      this.addPlayer = (v)=>{
-        player.others.push(v);
-        state.players = player.others.length;
-      };
-    }
-    StageManager.prototype = (()=>{
-      const _init = (self, settings) => {
-        _initCanavs(self);
-        _initPlayer(self);
-        _start(self);
-      }
-      
-      // Append canvas element on root
-      const _initCanavs = (self)=>{
-        const root = self.getRoot();
-
-        const CANVAS_ID = "canvas-playground";
-        let canvas = root.querySelector("canvas#"+CANVAS_ID);
-        if( !canvas ){
-          canvas = root.appendChild(document.createElement("canvas"));
-        }
-        canvas.id = "canvas-playground";
-        canvas.width = self.getWidth();
-        canvas.height = self.getHeight();
-
-        self.setCanvas(canvas);
-        self.setCtx(canvas.getContext("2d"));
-      }
-
-      const _initPlayer = (self)=>{
-        const playerName = "me";
-        const inputType = "wasd";
-        const player = new Player(
-          self.getCanvas(),
-          {
-            name: playerName,
-            inputType: inputType, 
-            shape: {
-              type: "circle",
-              color: "grey"
-            },
-            pos: {
-              x: self.getWidth()/2,
-              y: self.getHeight()/2,
+          // Target 따라가기
+          const follow = obj.getConfig("follow");
+          if( follow ) {
+            _followTarget(self, obj, follow);
+          }
+          
+          // 충돌감지
+          if( StageUtil.getDistance(player.getPosX(), player.getPosY(), obj.getPosX(), obj.getPosY())
+              < player.getRadius()
+            ){
+            player.setHealth(player.getHealth()-1); 
+          }
+          
+          // 충돌감지(Bullet 만들기)
+          if( StageUtil.getDistance(obj.getPosX(), obj.getPosY(), player.getPosX(), player.getPosY())
+              < obj.getRadius()
+            ){
+            const objHealth = obj.getHealth()-10;
+            obj.setHealth(objHealth);
+            if( objHealth <= 0){
+              delete objs[idx];
             }
           }
-        );
-        stage.setPlayer(player);
+          // Object 그리기
+          obj.draw();
+        }
+        self.setPlayers(objs.filter((o)=>(o)));
       }
 
       // Canvas 그리기 이벤트
       const _draw = (self)=>{
-        
-        const ctx = self.getCtx();
-
         // Canvas 그리기 서브 이벤트
         function drawer(){
-          // Canvas 초기화
-          _clear(self);
+          _clear(self); // Canvas 초기화
 
-          // 스테이지 그리기
-          ctx.strokeStyle = "#000000";
-          ctx.beginPath();
-          ctx.rect(0, 0, self.getWidth(), self.getHeight());
-          ctx.stroke();
-          ctx.closePath();
-
-          // 플레이어 그리기
-          const players = self.getPlayers();
-          players.forEach((player)=>{
-            player.draw();
-          });
+          _drawStage(self); // Stage 그리기
+          _drawPlayers(self); // Player 그리기
 
           // 현재 상태 저장
           self.setState("drawing", requestAnimationFrame(drawer));
         }
         // 그리는 중인 경우 중단
-        if( self.getState("drawing") ){
-          cancelAnimationFrame(self.getState("drawing"));
-          self.setState("drawing", null);
-        }
+        cancelAnimationFrame(self.getState("drawing"));
+        self.setState("drawing", null);
+        
         // 그리기 시작
         drawer();
       }
@@ -658,9 +923,7 @@
       return {
         init(settings){
           _init(this, settings);
-        },
-        draw(){
-          _draw(this);
+          return this;
         },
         start(){
           _start(this);
@@ -674,28 +937,72 @@
       }
     })();
 
-    stage = new StageManager(document.body);
-    stage.init();
+    const canvas = document.querySelector("canvas#canvas-playground");
+    const player = new Player(
+      canvas,
+      {
+        name: "me",
+        size: "large",
+        shape: {
+          type: "triangle",
+          color: "grey",
+        },
+        // spawn
+        /*
+        pos: {
+          x: stage.getWidth()/2,
+          y: stage.getHeight()/2,
+        },
+        */
+      }
+    );
+    const stage = new StageManager(
+      canvas, 
+      { 
+        size: { 
+          width: (window.screen.width/5)*4, 
+          height: (window.screen.height/5)*3
+        }
+      }
+    );
+    stage.setPlayer(player);
+    stage.start();
+
   </script>
   <script>
 
-    const context = "/my-three-server/public";
+    // setInterval(addPlayer, Math.random()*1000);
 
     function addPlayer(){
-      const rand = parseInt(Math.random()*30)*(Math.random()*15 > 7.5 ? 1 : -1);
+      const randToggle = parseInt(Math.random()*1.5);
+      const randPos = {
+        x: ( randToggle === 0 ? Math.random()*stage.getWidth() : stage.getWidth() ),
+        y: ( randToggle === 0 ? stage.getHeight() : Math.random()*stage.getHeight() ),
+      }
+      const NPC = new Player(
+        stage.getCanvas(),
+        {
+          name: "NPC-"+(stage.getPlayers().length+1),
+          inputType: document.querySelector("[name=inputType]").value,
+          size: "small",
+          follow: stage.getPlayer(),
+          // follow: "pointer",
+          shape: {
+            type: document.querySelector("[name=shape]").value,
+            color: document.querySelector("[name=color]").value,
+          },
+          pos: {
+            x: randPos.x,
+            y: randPos.y,
+          },
+        }
+      );
+      NPC.setMoveSpeed(Math.random()*3+1);
 
-      const playerName = "Player-"+(stage.getPlayers().length+1);
-      const inputType = document.querySelector("[name=inputType]").value;
-
-      stage.addPlayer(new Player(stage.getCanvas(), {
-        name: playerName,
-        inputType: inputType, 
-        shape: {
-          type: document.querySelector("[name=shape]").value,
-          color: document.querySelector("[name=color]").value
-        }}
-      ));
+      stage.addPlayer(NPC);
     }
+  </script>
+  <script type="text/javascript">
     document.querySelector("#addPlayer").addEventListener("click", (e)=>{
       e.preventDefault();
       addPlayer();
